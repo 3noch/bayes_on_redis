@@ -1,2 +1,3 @@
+*.rdb
 python/bayes_on_redis/*.pyc
 python/build
