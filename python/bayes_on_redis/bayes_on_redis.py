@@ -50,7 +50,7 @@ class BayesOnRedis:
 
             scores[category] = 0
 
-            for word, count in self.count_occurance(text).iteritems():
+            for word, count in self.count_occurrence(text).iteritems():
                 tmp_score = self.redis.hget(self.redis_category_key(category), word)
                 if tmp_score and float(tmp_score) > 0.0:
                     tmp_score = float(tmp_score)
@@ -71,7 +71,7 @@ class BayesOnRedis:
 
 
     # Incoming text is always downcased
-    def count_occurance(self, text=''):
+    def count_occurrence(self, text=''):
         if not isinstance(text, basestring):
             raise Exception("input must be instance of String")
 
