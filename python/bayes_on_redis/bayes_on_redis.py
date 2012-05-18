@@ -18,7 +18,7 @@ class BayesOnRedis:
         category = category.lower()
         self.redis.sadd(self.__class__.categories_key, category)
 
-        for word, count in self.count_occurance(text).iteritems():
+        for word, count in self.count_occurrence(text).iteritems():
             self.redis.hincrby(self.redis_category_key(category), word, count)
 
     def learn(self, category, text):
@@ -28,7 +28,7 @@ class BayesOnRedis:
     def untrain(self, category, text):
         category = category.lower()
 
-        for word, count in self.count_occurance(text).iteritems():
+        for word, count in self.count_occurrence(text).iteritems():
             word_count_atm = self.redis.hget(self.redis_category_key(category), word)
             new_count = (word_count_atm - count) if (word_count_atm >= count) else 0
 
