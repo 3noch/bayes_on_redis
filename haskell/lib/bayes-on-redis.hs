@@ -6,7 +6,7 @@ import Data.ByteString.Char8 (ByteString,
                               pack,
                               readInteger,
                               splitWith)
-import Database.Redis as Rs hiding (append, sort)
+import Database.Redis hiding (append, sort)
 import Data.Char
 import Data.List
 
