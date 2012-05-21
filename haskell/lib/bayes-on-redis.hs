@@ -1,19 +1,15 @@
 module Main where
 
 import Control.Monad
-import Data.ByteString.Char8 (ByteString,
-                              append,
-                              pack,
-                              readInteger,
-                              splitWith)
-import Database.Redis hiding (append, sort)
+import qualified Data.ByteString.Char8 as B
+import Database.Redis hiding (sort)
 import Data.Char
 import Data.List
 
-type Category = String
-type Document = ByteString
-type Word     = ByteString
-type Tag      = ByteString
+type Category = B.ByteString
+type Document = B.ByteString
+type Word     = B.ByteString
+type Tag      = B.ByteString
 
 
 redisConfig :: ConnectInfo
@@ -38,7 +34,7 @@ untrain cat doc = do
 
 
 addCategory :: Category -> Redis ()
-addCategory cat = sadd getCategoriesTag [pack cat] >> return ()
+addCategory cat = sadd getCategoriesTag [cat] >> return ()
 
 
 applyDocumentWith :: (Tag -> (Word, Integer) -> Redis ())
@@ -68,25 +64,33 @@ removeDocument = applyDocumentWith removeWord
 countOccurrence :: Document -> [(Word, Integer)]
 countOccurrence = map makeTuple . group . sort . splitDocument
     where makeTuple xs@(first:_) = (first, genericLength xs)
-          splitDocument = splitWith (not . isAlphaNum)
+          splitDocument = B.splitWith (not . isAlphaNum)
 
 
-readRedisInteger :: Either Reply (Maybe ByteString) -> Maybe Integer
+readRedisInteger :: Either Reply (Maybe B.ByteString) -> Maybe Integer
 readRedisInteger (Right (Just str)) =
-    case readInteger str of
+    case B.readInteger str of
         (Just (val, _)) -> Just val
         _               -> Nothing
 readRedisInteger _ = Nothing
 
 
-integerToBs :: Integer -> ByteString
-integerToBs = pack . show
+integerToBs :: Integer -> B.ByteString
+integerToBs = B.pack . show
 
 
 getCategoriesTag :: Tag
-getCategoriesTag = pack "BayesOnRedis:categories"
+getCategoriesTag = B.pack "BayesOnRedis:categories"
 
 
 getRedisCategoryTag :: Category -> Tag
-getRedisCategoryTag cat = append (pack "BayesOnRedis:cat:") cat'
-    where cat' = pack (map toLower cat)
+getRedisCategoryTag cat = B.append (B.pack "BayesOnRedis:cat:") cat'
+    where cat' = B.map toLower cat
+
+
+smembers_ :: Tag -> Redis [B.ByteString]
+smembers_ tag = do
+    response <- smembers tag
+    return $ case response of
+        (Right members) -> members
+        _               -> []
