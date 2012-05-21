@@ -10,7 +10,7 @@ import Database.Redis hiding (append, sort)
 import Data.Char
 import Data.List
 
-type Category = ByteString
+type Category = String
 type Document = ByteString
 type Word     = ByteString
 type Tag      = ByteString
@@ -38,9 +38,7 @@ untrain cat doc = do
 
 
 addCategory :: Category -> Redis ()
-addCategory cat = do
-    sadd getCategoriesTag [cat]
-    return ()
+addCategory cat = sadd getCategoriesTag [pack cat] >> return ()
 
 
 applyDocumentWith :: (Tag -> (Word, Integer) -> Redis ())
@@ -53,22 +51,18 @@ applyDocumentWith modifier cat doc = mapM_ (modifier tag) (countOccurrence doc)
 
 insertDocument :: Category -> Document -> Redis ()
 insertDocument = applyDocumentWith insertWord
-    where
-        insertWord tag (word, count) = do
-            hincrby tag word count
-            return ()
+    where insertWord tag (word, count) = hincrby tag word count >> return ()
 
 
 removeDocument :: Category -> Document -> Redis ()
 removeDocument = applyDocumentWith removeWord
-    where
-        removeWord tag (word, count) = do
-            response <- hget tag word
-            case readRedisInteger response of
-                Just old -> do -- TODO delete zero-keys
-                    hset tag word (integerToBs $ max 0 (old - count))
-                    return ()
-                Nothing  -> return ()
+    where removeWord tag (word, count) = do
+              response <- hget tag word
+              case readRedisInteger response of
+                  Just old -> do -- TODO delete zero-keys
+                      hset tag word (integerToBs $ max 0 (old - count))
+                      return ()
+                  Nothing  -> return ()
 
 
 countOccurrence :: Document -> [(Word, Integer)]
@@ -94,4 +88,5 @@ getCategoriesTag = pack "BayesOnRedis:categories"
 
 
 getRedisCategoryTag :: Category -> Tag
-getRedisCategoryTag = append (pack "BayesOnRedis:cat:")
+getRedisCategoryTag cat = append (pack "BayesOnRedis:cat:") cat'
+    where cat' = pack (map toLower cat)
