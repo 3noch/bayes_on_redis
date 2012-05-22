@@ -1,6 +1,7 @@
 module Main where
 
 import Control.Monad
+import Data.ByteString.Char8 (ByteString, pack)
 import qualified Data.ByteString.Char8 as B
 import Database.Redis hiding (sort)
 import Data.Char
@@ -10,6 +11,7 @@ type Category = B.ByteString
 type Document = B.ByteString
 type Word     = B.ByteString
 type Tag      = B.ByteString
+type Score    = Double
 
 
 redisConfig :: ConnectInfo
@@ -33,8 +35,37 @@ untrain cat doc = do
     runRedis conn $ removeDocument cat doc
 
 
+score :: Document -> IO [(Category, Score)]
+score doc = do
+    conn   <- connect redisConfig
+    cats   <- runRedis conn $ getMembersFromSet categoriesTag
+    scores <- runRedis conn $ mapM (scoreInCategory words) cats
+    return (zip cats scores)
+    where (words, _) = unzip (countOccurrence doc)
+
+
+scoreInCategory :: [Word] -> Category -> Redis Score
+scoreInCategory words cat = do
+    totalWords' <- hvals tag
+    let totalWords = case totalWords' of
+                         (Right vals) -> sum $ map (getDoubleOrZero . Just) vals
+                         _            -> 0
+    redisCounts' <- hmget tag words
+    let redisCounts = case redisCounts' of
+                          (Right vals) -> map getDoubleOrZero vals
+                          _            -> [] :: [Double]
+    return $ sum $ map (\x -> log (x / totalWords)) (map (\x -> if x <= 0 then 0.1 else x) redisCounts)
+    where tag = getRedisCategoryTag cat
+
+          getDoubleOrZero :: Maybe B.ByteString -> Double
+          getDoubleOrZero (Just str) = case B.readInt str of
+              (Just (val, _)) -> fromIntegral val
+              Nothing         -> 0.0
+          getDoubleOrZero _          = 0.0
+
+
 addCategory :: Category -> Redis ()
-addCategory cat = sadd getCategoriesTag [cat] >> return ()
+addCategory cat = sadd categoriesTag [cat] >> return ()
 
 
 applyDocumentWith :: (Tag -> (Word, Integer) -> Redis ())
@@ -56,7 +87,7 @@ removeDocument = applyDocumentWith removeWord
               response <- hget tag word
               case readRedisInteger response of
                   Just old -> do -- TODO delete zero-keys
-                      hset tag word (integerToBs $ max 0 (old - count))
+                      hset tag word (toByteString $ max 0 (old - count))
                       return ()
                   Nothing  -> return ()
 
@@ -75,21 +106,21 @@ readRedisInteger (Right (Just str)) =
 readRedisInteger _ = Nothing
 
 
-integerToBs :: Integer -> B.ByteString
-integerToBs = B.pack . show
+toByteString :: (Show a) => a -> B.ByteString
+toByteString = pack . show
 
 
-getCategoriesTag :: Tag
-getCategoriesTag = B.pack "BayesOnRedis:categories"
+categoriesTag :: Tag
+categoriesTag = pack "BayesOnRedis:categories"
 
 
 getRedisCategoryTag :: Category -> Tag
-getRedisCategoryTag cat = B.append (B.pack "BayesOnRedis:cat:") cat'
+getRedisCategoryTag cat = B.append (pack "BayesOnRedis:cat:") cat'
     where cat' = B.map toLower cat
 
 
-smembers_ :: Tag -> Redis [B.ByteString]
-smembers_ tag = do
+getMembersFromSet :: Tag -> Redis [B.ByteString]
+getMembersFromSet tag = do
     response <- smembers tag
     return $ case response of
         (Right members) -> members
