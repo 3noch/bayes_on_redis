@@ -3,7 +3,7 @@ module Main where
 import Control.Monad
 import Data.ByteString.Char8 (ByteString, pack)
 import qualified Data.ByteString.Char8 as B
-import Database.Redis hiding (sort)
+import Database.Redis hiding (sort, sortBy)
 import Data.Char
 import Data.List
 
@@ -42,6 +42,12 @@ score doc = do
     scores <- runRedis conn $ mapM (scoreInCategory words) cats
     return (zip cats scores)
     where (words, _) = unzip (countOccurrence doc)
+
+
+classify :: Document -> IO Category
+classify doc = do
+    scores <- score doc
+    return $ (fst . last . sortBy (\(_, s1) (_, s2) -> compare s1 s2)) scores
 
 
 scoreInCategory :: [Word] -> Category -> Redis Score
