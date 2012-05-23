@@ -1,4 +1,4 @@
-module Main where
+module BayesOnRedis where
 
 import Control.Monad
 import Data.ByteString.Char8 (ByteString, pack)
