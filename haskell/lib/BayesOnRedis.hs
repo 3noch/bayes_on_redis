@@ -52,10 +52,10 @@ classify doc = do
 
 scoreInCategory :: [Word] -> Category -> Redis Score
 scoreInCategory words cat = do
-    totalWords' <- hvals tag
+    totalWords' <- hget tag (pack ":total")
     let totalWords = case totalWords' of
-                         (Right vals) -> sum $ map (getDoubleOrZero . Just) vals
-                         _            -> 0
+                         (Right val) -> getDoubleOrZero val
+                         _           -> 0
     redisCounts' <- hmget tag words
     let redisCounts = case redisCounts' of
                           (Right vals) -> map getDoubleOrZero vals
@@ -75,22 +75,26 @@ addCategory cat = sadd categoriesTag [cat'] >> return ()
     where cat' = B.map toLower cat
 
 
-applyDocumentWith :: (Tag -> (Word, Integer) -> Redis ())
-                     -> Category
-                     -> Document
-                     -> Redis ()
-applyDocumentWith modifier cat doc = mapM_ (modifier tag) (countOccurrence doc)
-    where tag = getRedisCategoryTag cat
-
-
 insertDocument :: Category -> Document -> Redis ()
-insertDocument = applyDocumentWith insertWord
-    where insertWord tag (word, count) = hincrby tag word count >> return ()
+insertDocument cat doc = do
+    mapM_ (insertWord tag) wordCounts
+    hincrby tag (pack ":total") total
+    return ()
+    where tag = getRedisCategoryTag cat
+          insertWord tag (word, count) = hincrby tag word count >> return ()
+          wordCounts = countOccurrence doc
+          total = (sum . snd . unzip) wordCounts
 
 
 removeDocument :: Category -> Document -> Redis ()
-removeDocument = applyDocumentWith removeWord
-    where removeWord tag (word, count) = do
+removeDocument cat doc = do
+    mapM_ (removeWord tag) wordCounts
+    hincrby tag (pack ":total") (-total)
+    return ()
+    where tag = getRedisCategoryTag cat
+          wordCounts = countOccurrence doc
+          total = (sum . snd . unzip) wordCounts
+          removeWord tag (word, count) = do
               response <- hget tag word
               case readRedisInteger response of
                   Just old -> do -- TODO delete zero-keys
