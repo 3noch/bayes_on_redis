@@ -71,8 +71,7 @@ scoreInCategory words cat = do
 
 
 addCategory :: Category -> Redis ()
-addCategory cat = sadd categoriesTag [cat'] >> return ()
-    where cat' = B.map toLower cat
+addCategory cat = sadd categoriesTag [cat] >> return ()
 
 
 insertDocument :: Category -> Document -> Redis ()
@@ -126,8 +125,7 @@ categoriesTag = pack "BayesOnRedis:categories"
 
 
 getRedisCategoryTag :: Category -> Tag
-getRedisCategoryTag cat = B.append (pack "BayesOnRedis:cat:") cat'
-    where cat' = B.map toLower cat
+getRedisCategoryTag cat = B.append (pack "BayesOnRedis:cat:") cat
 
 
 getMembersFromSet :: Tag -> Redis [B.ByteString]
