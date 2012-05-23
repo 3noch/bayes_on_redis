@@ -71,7 +71,8 @@ scoreInCategory words cat = do
 
 
 addCategory :: Category -> Redis ()
-addCategory cat = sadd categoriesTag [cat] >> return ()
+addCategory cat = sadd categoriesTag [cat'] >> return ()
+    where cat' = B.map toLower cat
 
 
 applyDocumentWith :: (Tag -> (Word, Integer) -> Redis ())
