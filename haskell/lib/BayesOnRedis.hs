@@ -102,7 +102,7 @@ removeDocument = applyDocumentWith removeWord
 countOccurrence :: Document -> [(Word, Integer)]
 countOccurrence = map makeTuple . group . sort . splitDocument
     where makeTuple xs@(first:_) = (first, genericLength xs)
-          splitDocument = B.splitWith (not . isAlphaNum)
+          splitDocument = filter (not . B.null) . B.splitWith (not . isAlphaNum)
 
 
 readRedisInteger :: Either Reply (Maybe B.ByteString) -> Maybe Integer
