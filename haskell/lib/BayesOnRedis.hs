@@ -68,7 +68,7 @@ scoreInCategory :: [Word] -> Category -> Redis (Maybe Score)
 scoreInCategory words cat = do
     totalWords  <- either (const 0)  getDoubleOrZero `fmap` hget tag (pack ":total")
     redisCounts <- either (const []) (map getDoubleOrZero) `fmap` hmget tag words
-    let classifier = sum $ map (\x -> log (x / totalWords)) (map (\x -> if x <= 0 then 0.1 else x) redisCounts)
+    let classifier = sum $ map (\x -> log (x / totalWords)) (filter (>0) redisCounts)
     let confidence = genericLength (filter (> 0) redisCounts) / genericLength redisCounts
     return $ if totalWords > 0
              then Just $ Score { scoreCategory   = cat
