@@ -37,7 +37,7 @@ untrain cat doc = do
     runRedis conn $ removeDocument cat doc
 
 
-score :: Document -> IO [(Category, Maybe Score)]
+score :: Document -> IO [(Category, Maybe (Score, Confidence))]
 score doc = do
     conn   <- connect redisConfig
     cats   <- runRedis conn $ getMembersFromSet categoriesTag
@@ -54,13 +54,14 @@ classify doc = do
              else Nothing
 
 
-scoreInCategory :: [Word] -> Category -> Redis (Maybe Score)
+scoreInCategory :: [Word] -> Category -> Redis (Maybe (Score, Confidence))
 scoreInCategory words cat = do
     totalWords  <- either (const 0)  getDoubleOrZero `fmap` hget tag (pack ":total")
     redisCounts <- either (const []) (map getDoubleOrZero) `fmap` hmget tag words
-
+    let score = sum $ map (\x -> log (x / totalWords)) (map (\x -> if x <= 0 then 0.1 else x) redisCounts)
+    let confidence = genericLength (filter (> 0) redisCounts) / genericLength redisCounts
     return $ if totalWords > 0
-             then Just $ sum $ map (\x -> log (x / totalWords)) (map (\x -> if x <= 0 then 0.1 else x) redisCounts)
+             then Just (score, confidence)
              else Nothing
     where tag = getRedisCategoryTag cat
 
@@ -69,7 +70,6 @@ scoreInCategory words cat = do
               (Just (val, _)) -> fromIntegral val
               Nothing         -> 0.0
           getDoubleOrZero _          = 0.0
-
 
 
 addCategory :: Category -> Redis ()
