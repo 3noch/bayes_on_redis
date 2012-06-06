@@ -14,6 +14,7 @@ type Document   = B.ByteString
 type Word       = B.ByteString
 type Tag        = B.ByteString
 type Score      = Double
+type ScoreInfo  = Maybe (Score, Confidence)
 
 
 redisConfig :: ConnectInfo
@@ -37,7 +38,7 @@ untrain cat doc = do
     runRedis conn $ removeDocument cat doc
 
 
-score :: Document -> IO [(Category, Maybe (Score, Confidence))]
+score :: Document -> IO [(Category, ScoreInfo)]
 score doc = do
     conn   <- connect redisConfig
     cats   <- runRedis conn $ getMembersFromSet categoriesTag
@@ -50,8 +51,11 @@ classify :: Document -> IO (Maybe Category)
 classify doc = do
     scores <- filter (isJust . snd) `fmap` score doc
     return $ if null scores
-             then Just $ (fst . last . sortBy (\(_, s1) (_, s2) -> compare s1 s2)) scores
-             else Nothing
+             then Nothing
+             else Just $ (fst . last . sortBy compareScores) scores
+    where
+        compareScores :: (Category, ScoreInfo) -> (Category, ScoreInfo) -> Ordering
+        compareScores (_, (Just (a, _))) (_, (Just (b, _))) = compare a b
 
 
 scoreInCategory :: [Word] -> Category -> Redis (Maybe (Score, Confidence))
