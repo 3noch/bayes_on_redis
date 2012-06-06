@@ -53,8 +53,8 @@ classify doc = do
 
 scoreInCategory :: [Word] -> Category -> Redis Score
 scoreInCategory words cat = do
-    totalWords  <- either (always 0)  getDoubleOrZero `fmap` hget tag (pack ":total")
-    redisCounts <- either (always []) (map getDoubleOrZero) `fmap` hmget tag words
+    totalWords  <- either (const 0)  getDoubleOrZero `fmap` hget tag (pack ":total")
+    redisCounts <- either (const []) (map getDoubleOrZero) `fmap` hmget tag words
     return $ sum $ map (\x -> log (x / totalWords)) (map (\x -> if x <= 0 then 0.1 else x) redisCounts)
     where tag = getRedisCategoryTag cat
 
@@ -130,6 +130,3 @@ getMembersFromSet tag = do
     return $ case response of
         (Right members) -> members
         _               -> []
-
-always :: a -> (b -> a)
-always val = \_ -> val
