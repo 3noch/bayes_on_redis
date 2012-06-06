@@ -7,11 +7,12 @@ import Database.Redis hiding (sort, sortBy)
 import Data.Char
 import Data.List
 
-type Category = B.ByteString
-type Document = B.ByteString
-type Word     = B.ByteString
-type Tag      = B.ByteString
-type Score    = Double
+type Category   = B.ByteString
+type Confidence = Double
+type Document   = B.ByteString
+type Word       = B.ByteString
+type Tag        = B.ByteString
+type Score      = Double
 
 
 redisConfig :: ConnectInfo
@@ -52,14 +53,8 @@ classify doc = do
 
 scoreInCategory :: [Word] -> Category -> Redis Score
 scoreInCategory words cat = do
-    totalWords' <- hget tag (pack ":total")
-    let totalWords = case totalWords' of
-                         (Right val) -> getDoubleOrZero val
-                         _           -> 0
-    redisCounts' <- hmget tag words
-    let redisCounts = case redisCounts' of
-                          (Right vals) -> map getDoubleOrZero vals
-                          _            -> [] :: [Double]
+    totalWords  <- either (always 0)  getDoubleOrZero `fmap` hget tag (pack ":total")
+    redisCounts <- either (always []) (map getDoubleOrZero) `fmap` hmget tag words
     return $ sum $ map (\x -> log (x / totalWords)) (map (\x -> if x <= 0 then 0.1 else x) redisCounts)
     where tag = getRedisCategoryTag cat
 
@@ -68,6 +63,7 @@ scoreInCategory words cat = do
               (Just (val, _)) -> fromIntegral val
               Nothing         -> 0.0
           getDoubleOrZero _          = 0.0
+
 
 
 addCategory :: Category -> Redis ()
@@ -134,3 +130,6 @@ getMembersFromSet tag = do
     return $ case response of
         (Right members) -> members
         _               -> []
+
+always :: a -> (b -> a)
+always val = \_ -> val
