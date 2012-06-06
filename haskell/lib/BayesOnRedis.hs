@@ -9,12 +9,14 @@ import Data.List
 import Data.Maybe
 
 type Category   = B.ByteString
-type Confidence = Double
 type Document   = B.ByteString
 type Word       = B.ByteString
 type Tag        = B.ByteString
-type Score      = Double
-type ScoreInfo  = Maybe (Score, Confidence)
+
+data Score = Score { scoreCategory   :: Category
+                   , scoreClassifier :: Double
+                   , scoreConfidence :: Double}
+                   deriving (Show)
 
 
 redisConfig :: ConnectInfo
@@ -38,48 +40,40 @@ untrain cat doc = do
     runRedis conn $ removeDocument cat doc
 
 
-score :: Document -> IO [(Category, ScoreInfo)]
+score :: Document -> IO [Maybe Score]
 score doc = do
     conn   <- connect redisConfig
     cats   <- runRedis conn $ getMembersFromSet categoriesTag
     scores <- runRedis conn $ mapM (scoreInCategory words) cats
-    return (zip cats scores)
+    return scores
     where words = (fst . unzip . countOccurrence) doc
 
 
 classify :: Document -> IO (Maybe Category)
 classify doc = do
-    scores <- filter (isJust . snd) `fmap` score doc
-    return $ if null scores
-             then Nothing
-             else Just $ (fst . last . sortBy compareScores) scores
+    scores <- score doc
+    return (classifyWithScores scores)
+
+
+classifyWithScores :: [Maybe Score] -> Maybe Category
+classifyWithScores scores
+    | null usefulScores = Nothing
+    | otherwise = Just $ (scoreCategory . last . sortBy compareScores) usefulScores
     where
-        compareScores :: (Category, ScoreInfo) -> (Category, ScoreInfo) -> Ordering
-        compareScores (_, (Just (a, _))) (_, (Just (b, _))) = compare a b
+        usefulScores = (map fromJust . filter isJust) scores
+        compareScores s1 s2 = scoreClassifier s1 `compare` scoreClassifier s2
 
 
-classifyAndGetConfidence :: Document -> IO (Maybe (Category, [(Category, Confidence)]))
-classifyAndGetConfidence doc = do
-    scores <- filter (isJust . snd) `fmap` score doc
-    let confidences = map getCatConf scores
-    return $ if null scores
-             then Nothing
-             else Just ((fst . last . sortBy compareScores) scores, confidences)
-    where
-        compareScores :: (Category, ScoreInfo) -> (Category, ScoreInfo) -> Ordering
-        compareScores (_, (Just (a, _))) (_, (Just (b, _))) = compare a b
-
-        getCatConf (category, Just (_, confidence)) = (category, confidence)
-
-
-scoreInCategory :: [Word] -> Category -> Redis ScoreInfo
+scoreInCategory :: [Word] -> Category -> Redis (Maybe Score)
 scoreInCategory words cat = do
     totalWords  <- either (const 0)  getDoubleOrZero `fmap` hget tag (pack ":total")
     redisCounts <- either (const []) (map getDoubleOrZero) `fmap` hmget tag words
-    let score = sum $ map (\x -> log (x / totalWords)) (map (\x -> if x <= 0 then 0.1 else x) redisCounts)
+    let classifier = sum $ map (\x -> log (x / totalWords)) (map (\x -> if x <= 0 then 0.1 else x) redisCounts)
     let confidence = genericLength (filter (> 0) redisCounts) / genericLength redisCounts
     return $ if totalWords > 0
-             then Just (score, confidence)
+             then Just $ Score { scoreCategory   = cat
+                               , scoreClassifier = classifier
+                               , scoreConfidence = confidence}
              else Nothing
     where tag = getRedisCategoryTag cat
 
