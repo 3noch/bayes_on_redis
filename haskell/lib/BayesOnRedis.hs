@@ -58,7 +58,7 @@ classify doc = do
         compareScores (_, (Just (a, _))) (_, (Just (b, _))) = compare a b
 
 
-scoreInCategory :: [Word] -> Category -> Redis (Maybe (Score, Confidence))
+scoreInCategory :: [Word] -> Category -> Redis ScoreInfo
 scoreInCategory words cat = do
     totalWords  <- either (const 0)  getDoubleOrZero `fmap` hget tag (pack ":total")
     redisCounts <- either (const []) (map getDoubleOrZero) `fmap` hmget tag words
