@@ -6,6 +6,7 @@ import qualified Data.ByteString.Char8 as B
 import Database.Redis hiding (sort, sortBy)
 import Data.Char
 import Data.List
+import Data.Maybe
 
 type Category   = B.ByteString
 type Confidence = Double
@@ -36,7 +37,7 @@ untrain cat doc = do
     runRedis conn $ removeDocument cat doc
 
 
-score :: Document -> IO [(Category, Score)]
+score :: Document -> IO [(Category, Maybe Score)]
 score doc = do
     conn   <- connect redisConfig
     cats   <- runRedis conn $ getMembersFromSet categoriesTag
@@ -45,20 +46,22 @@ score doc = do
     where words = (fst . unzip . countOccurrence) doc
 
 
-classify :: Document -> IO Category
+classify :: Document -> IO (Maybe Category)
 classify doc = do
-    scores <- score doc
-    return $ (fst . last . sortBy (\(_, s1) (_, s2) -> compare s1 s2)) scores
+    scores <- filter (isJust . snd) `fmap` score doc
+    return $ if null scores
+             then Just $ (fst . last . sortBy (\(_, s1) (_, s2) -> compare s1 s2)) scores
+             else Nothing
 
 
-scoreInCategory :: [Word] -> Category -> Redis Score
+scoreInCategory :: [Word] -> Category -> Redis (Maybe Score)
 scoreInCategory words cat = do
     totalWords  <- either (const 0)  getDoubleOrZero `fmap` hget tag (pack ":total")
     redisCounts <- either (const []) (map getDoubleOrZero) `fmap` hmget tag words
 
     return $ if totalWords > 0
-             then sum $ map (\x -> log (x / totalWords)) (map (\x -> if x <= 0 then 0.1 else x) redisCounts)
-             else (-1/0) -- Negative Infinity
+             then Just $ sum $ map (\x -> log (x / totalWords)) (map (\x -> if x <= 0 then 0.1 else x) redisCounts)
+             else Nothing
     where tag = getRedisCategoryTag cat
 
           getDoubleOrZero :: Maybe B.ByteString -> Double
