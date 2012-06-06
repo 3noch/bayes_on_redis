@@ -42,7 +42,7 @@ score doc = do
     cats   <- runRedis conn $ getMembersFromSet categoriesTag
     scores <- runRedis conn $ mapM (scoreInCategory words) cats
     return (zip cats scores)
-    where (words, _) = unzip (countOccurrence doc)
+    where words = (fst . unzip . countOccurrence) doc
 
 
 classify :: Document -> IO Category
@@ -55,7 +55,10 @@ scoreInCategory :: [Word] -> Category -> Redis Score
 scoreInCategory words cat = do
     totalWords  <- either (const 0)  getDoubleOrZero `fmap` hget tag (pack ":total")
     redisCounts <- either (const []) (map getDoubleOrZero) `fmap` hmget tag words
-    return $ sum $ map (\x -> log (x / totalWords)) (map (\x -> if x <= 0 then 0.1 else x) redisCounts)
+
+    return $ if totalWords > 0
+             then sum $ map (\x -> log (x / totalWords)) (map (\x -> if x <= 0 then 0.1 else x) redisCounts)
+             else (-1/0) -- Negative Infinity
     where tag = getRedisCategoryTag cat
 
           getDoubleOrZero :: Maybe B.ByteString -> Double
