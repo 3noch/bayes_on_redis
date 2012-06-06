@@ -58,6 +58,20 @@ classify doc = do
         compareScores (_, (Just (a, _))) (_, (Just (b, _))) = compare a b
 
 
+classifyAndGetConfidence :: Document -> IO (Maybe (Category, [(Category, Confidence)]))
+classifyAndGetConfidence doc = do
+    scores <- filter (isJust . snd) `fmap` score doc
+    let confidences = map getCatConf scores
+    return $ if null scores
+             then Nothing
+             else Just ((fst . last . sortBy compareScores) scores, confidences)
+    where
+        compareScores :: (Category, ScoreInfo) -> (Category, ScoreInfo) -> Ordering
+        compareScores (_, (Just (a, _))) (_, (Just (b, _))) = compare a b
+
+        getCatConf (category, Just (_, confidence)) = (category, confidence)
+
+
 scoreInCategory :: [Word] -> Category -> Redis ScoreInfo
 scoreInCategory words cat = do
     totalWords  <- either (const 0)  getDoubleOrZero `fmap` hget tag (pack ":total")
