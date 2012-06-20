@@ -69,9 +69,9 @@ scoreInCategory words cat = do
     totalWords  <- either (const 0)  getDoubleOrZero `fmap` hget tag (pack ":total")
     redisCounts <- either (const []) (map getDoubleOrZero) `fmap` hmget tag words
     return $ if totalWords > 0
-             then Just $ Score { scoreCategory   = cat
-                               , scoreClassifier = classifier redisCounts totalWords
-                               , scoreConfidence = confidence redisCounts}
+             then Just Score { scoreCategory   = cat
+                             , scoreClassifier = classifier redisCounts totalWords
+                             , scoreConfidence = confidence redisCounts }
              else Nothing
     where tag = getRedisCategoryTag cat
           
