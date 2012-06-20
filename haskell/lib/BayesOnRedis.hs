@@ -68,15 +68,21 @@ scoreInCategory :: [Word] -> Category -> Redis (Maybe Score)
 scoreInCategory words cat = do
     totalWords  <- either (const 0)  getDoubleOrZero `fmap` hget tag (pack ":total")
     redisCounts <- either (const []) (map getDoubleOrZero) `fmap` hmget tag words
-    let classifier = sum $ map (\x -> log (x / totalWords)) (filter (>0) redisCounts)
-    let confidence = genericLength (filter (> 0) redisCounts) / genericLength redisCounts
     return $ if totalWords > 0
              then Just $ Score { scoreCategory   = cat
-                               , scoreClassifier = classifier
-                               , scoreConfidence = confidence}
+                               , scoreClassifier = classifier redisCounts totalWords
+                               , scoreConfidence = confidence redisCounts}
              else Nothing
     where tag = getRedisCategoryTag cat
-
+          
+          classifier xs total = sum (map bayesFunc (positives xs))
+              where bayesFunc x = log (x / total)
+          
+          confidence [] = 0
+          confidence xs = genericLength (positives xs) / genericLength xs
+          
+          positives xs = filter (> 0) xs
+          
           getDoubleOrZero :: Maybe B.ByteString -> Double
           getDoubleOrZero (Just str) = case B.readInt str of
               (Just (val, _)) -> fromIntegral val
