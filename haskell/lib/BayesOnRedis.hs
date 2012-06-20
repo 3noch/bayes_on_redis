@@ -44,9 +44,9 @@ score :: Document -> IO [Maybe Score]
 score doc = do
     conn   <- connect redisConfig
     cats   <- runRedis conn $ getMembersFromSet categoriesTag
-    scores <- runRedis conn $ mapM (scoreInCategory words) cats
+    scores <- runRedis conn $ mapM (scoreInCategory words counts) cats
     return scores
-    where words = (fst . unzip . countOccurrence) doc
+    where (words, counts) = (unzip . countOccurrence) doc
 
 
 classify :: Document -> IO (Maybe Category)
@@ -64,25 +64,28 @@ classifyWithScores scores
         compareScores s1 s2 = scoreClassifier s1 `compare` scoreClassifier s2
 
 
-scoreInCategory :: [Word] -> Category -> Redis (Maybe Score)
-scoreInCategory words cat = do
+scoreInCategory :: [Word] -> [Integer] -> Category -> Redis (Maybe Score)
+scoreInCategory words counts cat = do
     totalWords  <- either (const 0)  getDoubleOrZero `fmap` hget tag (pack ":total")
     redisCounts <- either (const []) (map getDoubleOrZero) `fmap` hmget tag words
     return $ if totalWords > 0
              then Just Score { scoreCategory   = cat
-                             , scoreClassifier = classifier redisCounts totalWords
+                             , scoreClassifier = classifier (scaleCounts redisCounts) totalWords
                              , scoreConfidence = confidence redisCounts }
              else Nothing
     where tag = getRedisCategoryTag cat
-          
+
+          scaleCounts redisCounts = zipWith (*) counts' redisCounts
+              where counts' = map fromInteger counts
+
           classifier xs total = sum (map bayesFunc (positives xs))
               where bayesFunc x = log (x / total)
-          
+
           confidence [] = 0
           confidence xs = genericLength (positives xs) / genericLength xs
-          
+
           positives xs = filter (> 0) xs
-          
+
           getDoubleOrZero :: Maybe B.ByteString -> Double
           getDoubleOrZero (Just str) = case B.readInt str of
               (Just (val, _)) -> fromIntegral val
